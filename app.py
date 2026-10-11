@@ -23,7 +23,7 @@ st.set_page_config(page_title="Chat With Your PDF", page_icon="📄", layout="wi
 st.title("📄 Chat With Your PDF")
 st.caption("Upload a PDF and chat with it. The AI reads the whole document.")
 
-MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]  # tried in order
+MODELS = ["gemini-3.8-flash"]  # tried first; other available models are discovered automatically
 MAX_PDF_MB = 18
 SAMPLE_QUESTIONS = [
     "Summarize this document.",
@@ -48,6 +48,23 @@ def get_secret_key():
         return ""
 
 
+def discover_models(client):
+    """Ask Google which Flash models this key can use right now (names change over time)."""
+    try:
+        found = []
+        for m in client.models.list():
+            n = m.name.replace("models/", "")
+            acts = getattr(m, "supported_actions", None) or []
+            if "generateContent" in acts and "flash" in n and not any(
+                    x in n for x in ("image", "tts", "live", "audio", "native", "embedding")):
+                found.append(n)
+        full = sorted([n for n in found if "lite" not in n], reverse=True)
+        lite = sorted([n for n in found if "lite" in n], reverse=True)
+        return full + lite
+    except Exception:
+        return []
+
+
 def ask_gemini(api_key, pdf_bytes, history, question, model_override=""):
     client = genai.Client(api_key=api_key)
     pdf = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
@@ -61,9 +78,12 @@ def ask_gemini(api_key, pdf_bytes, history, question, model_override=""):
     contents.append(types.Content(role="user", parts=[types.Part(text=question)]))
     config = types.GenerateContentConfig(system_instruction=SYSTEM)
 
-    models = ([model_override] if model_override else []) + MODELS
+    models = []
+    for n in ([model_override] if model_override else []) + MODELS + discover_models(client):
+        if n and n not in models:
+            models.append(n)
     errors = []
-    for model in models:
+    for model in models[:6]:
         try:
             resp = client.models.generate_content(model=model, contents=contents, config=config)
             if resp.text:
