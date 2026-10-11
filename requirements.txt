@@ -1,9 +1,0 @@
-streamlit
-pypdf
-python-docx
-pandas
-openpyxl
-numpy
-matplotlib
-formulas
-google-genai
