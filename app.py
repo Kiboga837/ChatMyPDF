@@ -15,7 +15,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 # ---------------- 1. Page config ----------------
 st.set_page_config(page_title="Chat With Your PDF", page_icon="📄", layout="wide")
@@ -38,7 +39,11 @@ def load_embeddings():
 
 @st.cache_resource(show_spinner="Loading language model (first run downloads it)...")
 def load_llm():
-    return pipeline("text2text-generation", model="google/flan-t5-base")
+    name = "google/flan-t5-base"
+    tok = AutoTokenizer.from_pretrained(name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(name)
+    model.eval()
+    return tok, model
 
 
 # ---------------- 3. PDF text extraction ----------------
@@ -63,15 +68,17 @@ def answer_question(question, vectorstore):
     index, chunks = vectorstore
     qv = load_embeddings().encode([question], normalize_embeddings=True)
     _, ids = index.search(np.asarray(qv, dtype="float32"), min(4, len(chunks)))
-    context = "\n\n".join(chunks[i] for i in ids[0] if i >= 0)[:3500]
+    context = "\n\n".join(chunks[i] for i in ids[0] if i >= 0)[:3000]
     prompt = (
         "Answer the question in detail using only the context below. "
         'If the answer is not in the context, say "I could not find that in the document."\n\n'
         f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"
     )
-    llm = load_llm()
-    out = llm(prompt, max_new_tokens=256, num_beams=3, no_repeat_ngram_size=3, truncation=True)
-    return out[0]["generated_text"].strip()
+    tok, model = load_llm()
+    inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=1024)
+    with torch.no_grad():
+        out = model.generate(**inputs, max_new_tokens=256, num_beams=3, no_repeat_ngram_size=3)
+    return tok.decode(out[0], skip_special_tokens=True).strip()
 
 
 # ---------------- Session state ----------------
