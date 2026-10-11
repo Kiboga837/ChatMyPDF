@@ -20,6 +20,17 @@ from google.genai import types
 from pypdf import PdfReader
 
 st.set_page_config(page_title="Chat With Your PDF", page_icon="📄", layout="wide")
+
+# Hide Streamlit's top-right toolbar (Fork / GitHub / menu) and footer from visitors
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"],
+    .stAppDeployButton, #MainMenu, footer {display: none !important; visibility: hidden !important;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 st.title("📄 Chat With Your PDF")
 st.caption("Upload a PDF and chat with it. The AI reads the whole document.")
 
